@@ -201,7 +201,9 @@ class Node(object):
 
             # Propago consulta de find nodes a traves de los minimos de mi nodo
             # de contacto inicial.
-            nodes_min = self.__find_nodes_join(data)
+            nodes_min = self.__find_nodes_join(data)  
+            # expando con un dato que sea la distancia.
+            nodes_min = [(node_hash, node_rank, distance(node_hash, self.__hash)) for node_hash, node_rank in nodes_min]
 
             # obtengo los K mínimos
             nodes_min = sorted(nodes_min, key=lambda x: x[2])
@@ -287,9 +289,10 @@ class Node(object):
         # Agrego ARBITRARIAMENTE al nodo actual.
         nodes_min.append((self.__hash, self.__rank))
 
-        # Busco entre mis archivos los más cercanos a node que a mí
-        files = self.__get_closest_files(node_hash)
-
+        # Busco entre mis archivos los más cercanos a node que a mí.
+        files_menor = self.__get_closest_files(node_hash)
+        files_menor_igual = self.__get_equal_files(node_hash)
+    files_menor_igual.update(files_menor)
         # Envio los nodos más cercanos y los archivos más cercanos a node que tenía yo
         data = (nodes_min, files_menor_igual)
         self.__comm.send(data, dest=node_rank, tag=TAG_NODE_FIND_NODES_JOIN_RESP)
@@ -536,6 +539,7 @@ if __name__ == "__main__":
         console = Console(rank)
         console.run()
     else:
-        node_id = int(random.uniform(0, 2**K))
+        # node_id = int(random.uniform(0, 2**K))
+        node_id = rank 
         node = Node(rank, node_id)
         node.run()
