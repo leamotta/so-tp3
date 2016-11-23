@@ -135,9 +135,38 @@ class Node(object):
         processed = set()
         nodes_min = {}
 
-    ###################
-    # Completar
-    ###################
+        # el minimo al empezar soy yo
+        min_distance = distance(self.__hash, thing_hash) 
+        nodes_min[self.__rank] = self.__hash
+
+        #me agrego al set de procesados
+        processed.add((self.__hash, self.__rank))
+
+        # proceso los iniciales
+        for node in queue:
+            processed.add(node)
+
+        # proceso los siguientes
+        for node in queue:
+            if (distance(node[0], thing_hash) < min_distance):
+                nodes_min = {node[1]: node[0]}
+                min_distance = distance(node[0], thing_hash)
+            elif (distance(node[0], thing_hash) == min_distance):
+                nodes_min[node[1]] = node[0]
+
+            if (node[1] != self.__rank):# no me mando mensaje a mi mismo
+                self.__comm.send(thing_hash, dest=node[1], tag=TAG_NODE_FIND_NODES_REQ)
+                # waiting
+                recieved_node_list = self.__comm.recv(source=node[1], tag=TAG_NODE_FIND_NODES_RESP)
+
+                # hay que encolar a los nodos recibidos no procesados previamente
+                for node_recieved in recieved_node_list:
+                    if not node_recieved in processed:
+                        # sumo a la cola
+                        queue.append(node_recieved) 
+                        # sumo a los procesados
+                        processed.add(node_recieved) 
+
         return nodes_min
 
     # casi igual a find_node pero cada nodo va borrando los archivos que ya estarían más cercano al find nodes
