@@ -174,9 +174,38 @@ class Node(object):
     # que le correspondería tener a él
     def __find_nodes_join(self, contact_nodes):
         nodes_min = set()
-    ################
-    # Completar
-    ################
+        queue = contact_nodes
+        processed = set()
+
+        thing_hash = self.__hash
+
+        #me agrego al set de procesados
+        processed.add((self.__hash, self.__rank))
+        
+        #proceso los iniciales
+        for node in queue:
+            processed.add(node)
+
+        # los siguientes
+        for node in queue:
+            nodes_min.add(node)
+
+            if (node[1] != self.__rank):
+                self.__comm.send((thing_hash, self.__rank), dest=node[1], tag=TAG_NODE_FIND_NODES_JOIN_REQ)
+                # waiting
+                (recieved_node_list, files) = self.__comm.recv(source=node[1], tag=TAG_NODE_FIND_NODES_JOIN_RESP)
+                # copio files al self
+                for file_hash, file_name in files.items():
+                    self.__files[file_hash] = file_name
+
+                # hay que encolar a los nodos recibidos no procesados previamente
+                for node_recieved in recieved_node_list:
+                    if not node_recieved in processed:
+                        # sumo a la cola
+                        queue.append(node_recieved) 
+                        # sumo a los procesados
+                        processed.add(node_recieved) 
+
         return nodes_min
 
     def __print_routing_table(self):
