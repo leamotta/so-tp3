@@ -350,7 +350,7 @@ class Node(object):
         # Busco entre mis archivos los más cercanos a node que a mí.
         files_menor = self.__get_closest_files(node_hash)
         files_menor_igual = self.__get_equal_files(node_hash)
-    files_menor_igual.update(files_menor)
+        files_menor_igual.update(files_menor)
         # Envio los nodos más cercanos y los archivos más cercanos a node que tenía yo
         data = (nodes_min, files_menor_igual)
         self.__comm.send(data, dest=node_rank, tag=TAG_NODE_FIND_NODES_JOIN_RESP)
