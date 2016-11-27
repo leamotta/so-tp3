@@ -1,0 +1,16 @@
+j 1
+s 1 arch1
+s 1 arch2
+j 3
+s 3 arch3
+s 1 arch4
+s 3 arch5
+j 4
+s 4 arch6
+s 1 arch7
+s 3 arch8
+s 4 arch9
+l 4 arch9
+l 3 arch8
+l 1 arch4
+q
