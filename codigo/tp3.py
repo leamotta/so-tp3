@@ -135,37 +135,29 @@ class Node(object):
         processed = set()
         nodes_min = {}
 
-        # el minimo al empezar soy yo
-        min_distance = distance(self.__hash, thing_hash) 
-        nodes_min[self.__rank] = self.__hash
-
         #me agrego al set de procesados
-        processed.add((self.__hash, self.__rank))
+        processed.add(self.__rank)
 
-        # proceso los iniciales
+        # el minimo al empezar soy yo
+        nodes_min[self.__hash] = self.__rank
+
+        # proceso la cola
+        # node[0] = hash / node[1] = rank
         for node in queue:
-            processed.add(node)
-
-        # proceso los siguientes
-        for node in queue:
-            if (distance(node[0], thing_hash) < min_distance):
-                nodes_min = {node[1]: node[0]}
-                min_distance = distance(node[0], thing_hash)
-            elif (distance(node[0], thing_hash) == min_distance):
-                nodes_min[node[1]] = node[0]
-
-            if (node[1] != self.__rank):# no me mando mensaje a mi mismo
+            if node[1] not in processed:
+                processed.add(node[1])
+                # llamo bloqueante para tener los valores mas cercanos al hash
                 self.__comm.send(thing_hash, dest=node[1], tag=TAG_NODE_FIND_NODES_REQ)
-                # waiting
+                # respuesta
                 recieved_node_list = self.__comm.recv(source=node[1], tag=TAG_NODE_FIND_NODES_RESP)
 
                 # hay que encolar a los nodos recibidos no procesados previamente
                 for node_recieved in recieved_node_list:
                     if not node_recieved in processed:
                         # sumo a la cola
-                        queue.append(node_recieved) 
-                        # sumo a los procesados
-                        processed.add(node_recieved) 
+                        queue.append(node_recieved)
+                        # sumo a nodes_min
+                        nodes_min[node_recieved[0]] = node_recieved[1]; 
 
         return nodes_min
 
@@ -174,37 +166,37 @@ class Node(object):
     # que le correspondería tener a él
     def __find_nodes_join(self, contact_nodes):
         nodes_min = set()
-        queue = contact_nodes
+
         processed = set()
+        queue = contact_nodes
+        closer_nodes = {}
 
-        thing_hash = self.__hash
+        # me agrego al set de procesados
+        processed.add(self.__rank)
 
-        #me agrego al set de procesados
-        processed.add((self.__hash, self.__rank))
-        
-        #proceso los iniciales
+        # proceso la cola
+        # node[0] = hash / node[1] = rank
         for node in queue:
-            processed.add(node)
+            if node[1] not in processed:
+                processed.add(node[1])
+                # llamo bloqueante para tener los valores mas cercanos
+                self.__comm.send((self.__hash,self.__rank), dest=node[1], tag=TAG_NODE_FIND_NODES_JOIN_REQ)
+                # respuesta
+                recieved_node_list = self.__comm.recv(source=node[1], tag=TAG_NODE_FIND_NODES_JOIN_RESP)
+                
+                #encolo nodos recibidos
+                queue.extend(recieved_node_list[0])
+                
+                #file[0] = hash / file[1] = path
+                for file in recieved_node_list[1].items():
+                    self.__files[file[0]] = file[1]
 
-        # los siguientes
-        for node in queue:
-            nodes_min.add(node)
+                for node_recieved in recieved_node_list[0]:
+                    if node_recieved[1] != self.__rank:
+                        closer_nodes[node_recieved[0]] = node_recieved[1]
 
-            if (node[1] != self.__rank):
-                self.__comm.send((thing_hash, self.__rank), dest=node[1], tag=TAG_NODE_FIND_NODES_JOIN_REQ)
-                # waiting
-                (recieved_node_list, files) = self.__comm.recv(source=node[1], tag=TAG_NODE_FIND_NODES_JOIN_RESP)
-                # copio files al self
-                for file_hash, file_name in files.items():
-                    self.__files[file_hash] = file_name
-
-                # hay que encolar a los nodos recibidos no procesados previamente
-                for node_recieved in recieved_node_list:
-                    if not node_recieved in processed:
-                        # sumo a la cola
-                        queue.append(node_recieved) 
-                        # sumo a los procesados
-                        processed.add(node_recieved) 
+        for n in closer_nodes.items():
+            nodes_min.add(n)
 
         return nodes_min
 
@@ -301,12 +293,16 @@ class Node(object):
 
         # Propago consulta de find nodes a traves de mis minimos locales.
         nodes_min = self.__find_nodes(nodes_min_local, file_hash)
-    ########################
-    #     Completar
-    ########################
+        # Envio el archivo a los nodos más cercanos
+        nodes_min = self.__get_mins(nodes_min, file_hash)
 
-            # Envio el archivo a los nodos más cercanos
-
+        # node_min[0] = hash / node_min[1] = rank
+        for node_min in nodes_min:
+            if self.__rank == node_min[1]:
+                self.__handle_node_store_req(data)
+            else:
+                self.__comm.send(data, dest=node_min[1], tag=TAG_NODE_STORE_REQ)
+            
     # Busca el archivo entre los más cercanos, a partir del nodo fuente. Les va consultando a cada uno los más cercanos
     # con __finde_nodes
     def __handle_console_look_up(self, source, data):
@@ -322,9 +318,17 @@ class Node(object):
         # Propago consulta de find nodes a traves de mis minimos locales.
         nodes_min = self.__find_nodes(nodes_min_local, file_hash)
 
-    ########################
-    #     Completar
-    ########################
+        data = False
+        #node_min[0] = hash / node_min[1] = rank
+        for node_min in nodes_min.items():
+            # mando mensaje si no es mi rank
+            if not data and node_min[1] != self.__rank:
+                self.__comm.send(file_hash, dest=node_min[1], tag=TAG_NODE_LOOKUP_REQ)
+                data = self.__comm.recv(source=node_min[1], tag=TAG_NODE_LOOKUP_RESP)
+            #si esta en mis archivos
+            elif node_min[1] == self.__rank and file_hash in self.__files:
+                data = self.__files[file_hash]
+
         # Devuelvo el archivo.
         self.__comm.send(data, dest=source, tag=TAG_CONSOLE_LOOKUP_RESP)
 
@@ -388,7 +392,13 @@ class Node(object):
         print("[D] [{:02d}] [NODE|LOOK-UP] Buscando archivo con hash '{}'".format(self.__rank, file_hash))
         print("[D] [{:02d}] [NODE|LOOK-UP] Tabla de archivos: {}".format(self.__rank, self.__files))
 
-        data = self.__files[file_hash]
+        # data = self.__files[file_hash] ROMPE!
+        # devolvemos false si no existe
+        if file_hash in self.__files:
+            data = self.__files[file_hash]
+        else:
+            data = False
+
         self.__comm.send(data, dest=source, tag=TAG_NODE_LOOKUP_RESP)
 
     def __handle_node_store_req(self, data):
