@@ -1,0 +1,16 @@
+j 1
+j 2
+j 3
+j 4
+s 3 file1
+s 3 file2
+s 3 file3
+s 3 file4
+l 1 file1
+l 2 file1
+l 4 file1
+l 3 file1
+l 3 file2
+l 3 file3
+l 3 file4
+q
