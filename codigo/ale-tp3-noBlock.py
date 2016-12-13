@@ -134,6 +134,7 @@ class Node(object):
         queue = contact_nodes
         processed = set()
         nodes_min = {}
+        cantMensajes = 0
 
         #me agrego al set de procesados
         processed.add(self.__rank)
@@ -148,12 +149,14 @@ class Node(object):
                 processed.add(node[1])
                 # llamo no bloqueante para tener los valores mas cercanos al hash
                 self.__comm.isend(thing_hash, dest=node[1], tag=TAG_NODE_FIND_NODES_REQ)
+                cantMensajes = cantMensajes + 1
                 
             # iprobe indica si hay mensajes de manera no bloqueantes
             while self.__comm.iprobe() > 0:
                 # respuesta
                 irecv = self.__comm.irecv(source=MPI.ANY_SOURCE, tag=TAG_NODE_FIND_NODES_RESP)
                 recieved_node_list = irecv.wait()
+                cantMensajes = cantMensajes - 1
                 # hay que encolar a los nodos recibidos no procesados previamente
                 for node_recieved in recieved_node_list:
                     if not node_recieved in processed:
@@ -162,13 +165,13 @@ class Node(object):
                         # sumo a nodes_min
                         nodes_min[node_recieved[0]] = node_recieved[1];
 
-        ####### ESTO AGREGUE. INICIO ############
         # Agregué un ciclo while más, para recibir todos los mensajes que llegaron después de que se procesaron todos los nodos de la queue.
         # iprobe indica si hay mensajes de manera no bloqueantes
-        while self.__comm.iprobe() > 0:
+        while self.__comm.iprobe() > 0 and cantMensajes > 0:
             # respuesta
             irecv = self.__comm.irecv(source=MPI.ANY_SOURCE, tag=TAG_NODE_FIND_NODES_RESP)
             recieved_node_list = irecv.wait()
+            cantMensajes = cantMensajes - 1
             # hay que encolar a los nodos recibidos no procesados previamente
             for node_recieved in recieved_node_list:
                 if not node_recieved in processed:
@@ -178,7 +181,8 @@ class Node(object):
                     processed.add(node_recieved[1])
                     # llamo no bloqueante para tener los valores mas cercanos al hash
                     self.__comm.isend(thing_hash, dest=node_recieved[1], tag=TAG_NODE_FIND_NODES_REQ)
-        ####### ESTO AGREGUE. FIN ############
+                    cantMensajes = cantMensajes + 1
+
 
         return nodes_min
 
@@ -191,6 +195,7 @@ class Node(object):
         processed = set()
         queue = contact_nodes
         closer_nodes = {}
+        cantMensajes = 0
 
         # me agrego al set de procesados
         processed.add(self.__rank)
@@ -202,12 +207,14 @@ class Node(object):
                 processed.add(node[1])
                 # llamo no bloqueante para tener los valores mas cercanos
                 self.__comm.isend((self.__hash,self.__rank), dest=node[1], tag=TAG_NODE_FIND_NODES_JOIN_REQ)
-            
+                cantMensajes = cantMensajes + 1
+
             # iprobe indica si hay mensajes de manera no bloqueantes    
             while self.__comm.iprobe() > 0:        
                 # respuesta
                 irecv = self.__comm.irecv(source=MPI.ANY_SOURCE, tag=TAG_NODE_FIND_NODES_JOIN_RESP)
                 recieved_node_list = irecv.wait()
+                cantMensajes = cantMensajes - 1
                 
                 #encolo nodos recibidos
                 queue.extend(recieved_node_list[0])
@@ -220,13 +227,13 @@ class Node(object):
                     if node_recieved[1] != self.__rank:
                         closer_nodes[node_recieved[0]] = node_recieved[1]
 
-        ####### ESTO AGREGUE. INICIO ############
         # Agregué un ciclo while más, para recibir todos los mensajes que llegaron después de que se procesaron todos los nodos de la queue.
         # iprobe indica si hay mensajes de manera no bloqueantes    
-        while self.__comm.iprobe() > 0:        
+        while self.__comm.iprobe() > 0 and cantMensajes > 0:        
             # respuesta
             irecv = self.__comm.irecv(source=MPI.ANY_SOURCE, tag=TAG_NODE_FIND_NODES_JOIN_RESP)
             recieved_node_list = irecv.wait()
+            cantMensajes = cantMensajes - 1
             
             #encolo nodos recibidos
             queue.extend(recieved_node_list[0])
@@ -245,7 +252,8 @@ class Node(object):
                     processed.add(node[1])
                     # llamo no bloqueante para tener los valores mas cercanos
                     self.__comm.isend((self.__hash,self.__rank), dest=node[1], tag=TAG_NODE_FIND_NODES_JOIN_REQ)
-        ####### ESTO AGREGUE. FIN ############
+                    cantMensajes = cantMensajes + 1
+
 
         for n in closer_nodes.items():
             nodes_min.add(n)
